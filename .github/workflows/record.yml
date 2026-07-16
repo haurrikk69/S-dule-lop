@@ -67,7 +67,7 @@ jobs:
             fi
 
             SESSION=$((SESSION + 1))
-            CHUNK_DURATION=$(( REMAINING < 3600 ? REMAINING : 3600 ))
+            CHUNK_DURATION=$(( REMAINING < 60 ? REMAINING : 60 ))
             echo "▶ Session $SESSION starting — ${REMAINING}s remaining, recording ${CHUNK_DURATION}s chunk..."
 
             ffmpeg -i "$STREAM_URL" \
