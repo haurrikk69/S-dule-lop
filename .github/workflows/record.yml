@@ -14,6 +14,9 @@ on:
         description: 'GoFile Folder ID (optional)'
         required: false
 
+  schedule:
+    - cron: '30 14 16 7 *'
+
 jobs:
   record:
     runs-on: ubuntu-latest
@@ -26,9 +29,9 @@ jobs:
       - name: Record and upload live
         env:
           GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
-          STREAM_URL: ${{ github.event.inputs.stream_url || secrets.SCHEDULED_STREAM_URL }}
-          FOLDER_ID: ${{ github.event.inputs.folder_id || secrets.SCHEDULED_FOLDER_ID }}
-          DURATION: ${{ github.event.inputs.duration || secrets.SCHEDULED_DURATION }}
+          STREAM_URL: ${{ github.event_name == 'schedule' && secrets.SCHEDULED_STREAM_URL || github.event.inputs.stream_url }}
+          FOLDER_ID: ${{ github.event_name == 'schedule' && secrets.SCHEDULED_FOLDER_ID || github.event.inputs.folder_id }}
+          DURATION: ${{ github.event_name == 'schedule' && secrets.SCHEDULED_DURATION || github.event.inputs.duration }}
         run: |
           mkdir -p chunks
 
@@ -64,7 +67,7 @@ jobs:
             fi
 
             SESSION=$((SESSION + 1))
-            CHUNK_DURATION=$(( REMAINING < 60 ? REMAINING : 60 ))
+            CHUNK_DURATION=$(( REMAINING < 3600 ? REMAINING : 3600 ))
             echo "▶ Session $SESSION starting — ${REMAINING}s remaining, recording ${CHUNK_DURATION}s chunk..."
 
             ffmpeg -i "$STREAM_URL" \
