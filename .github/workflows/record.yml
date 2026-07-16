@@ -15,7 +15,7 @@ on:
         required: false
 
   schedule:
-    - cron: '10 3 16 7 *'
+    - cron: '50 3 16 7 *'
 
 jobs:
   record:
