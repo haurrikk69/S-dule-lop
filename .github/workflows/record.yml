@@ -9,7 +9,6 @@ on:
       duration:
         description: 'Duration e.g. 02:30:00 (leave empty to use secret)'
         required: false
-        default: '01:00:00'
       folder_id:
         description: 'GoFile Folder ID (leave empty to use secret)'
         required: false
