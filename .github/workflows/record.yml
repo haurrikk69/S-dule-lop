@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       stream_url:
-        description: 'Stream URL'
-        required: true
+        description: 'Stream URL (leave empty to use secret)'
+        required: false
       duration:
-        description: 'Duration e.g. 02:30:00'
-        required: true
+        description: 'Duration e.g. 02:30:00 (leave empty to use secret)'
+        required: false
         default: '01:00:00'
       folder_id:
-        description: 'GoFile Folder ID (optional)'
+        description: 'GoFile Folder ID (leave empty to use secret)'
         required: false
 
 jobs:
@@ -26,9 +26,9 @@ jobs:
       - name: Record and upload live
         env:
           GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
-          STREAM_URL: ${{ github.event.inputs.stream_url }}
-          FOLDER_ID: ${{ github.event.inputs.folder_id }}
-          DURATION: ${{ github.event.inputs.duration }}
+          STREAM_URL: ${{ github.event.inputs.stream_url || secrets.SCHEDULED_STREAM_URL }}
+          FOLDER_ID: ${{ github.event.inputs.folder_id || secrets.SCHEDULED_FOLDER_ID }}
+          DURATION: ${{ github.event.inputs.duration || secrets.SCHEDULED_DURATION }}
         run: |
           mkdir -p chunks
 
