@@ -14,9 +14,6 @@ on:
         description: 'GoFile Folder ID (optional)'
         required: false
 
-  schedule:
-    - cron: "50 5 16 7 *"
-
 jobs:
   record:
     runs-on: ubuntu-latest
@@ -29,9 +26,9 @@ jobs:
       - name: Record and upload live
         env:
           GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
-          STREAM_URL: ${{ github.event_name == 'schedule' && secrets.SCHEDULED_STREAM_URL || github.event.inputs.stream_url }}
-          FOLDER_ID: ${{ github.event_name == 'schedule' && secrets.SCHEDULED_FOLDER_ID || github.event.inputs.folder_id }}
-          DURATION: ${{ github.event_name == 'schedule' && secrets.SCHEDULED_DURATION || github.event.inputs.duration }}
+          STREAM_URL: ${{ github.event.inputs.stream_url }}
+          FOLDER_ID: ${{ github.event.inputs.folder_id }}
+          DURATION: ${{ github.event.inputs.duration }}
         run: |
           mkdir -p chunks
 
@@ -41,7 +38,7 @@ jobs:
 
           upload_file() {
             local FILE=$1
-            echo "⬆ Uploading $FILE..."
+            echo "Uploading $FILE..."
             if [ -n "$FOLDER_ID" ]; then
               RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
                 -F "token=${GOFILE_TOKEN}" \
@@ -53,7 +50,7 @@ jobs:
                 -F "file=@${FILE}")
             fi
             STATUS=$(echo $RESP | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','error'))")
-            echo "$FILE → $STATUS"
+            echo "$FILE -> $STATUS"
             rm "$FILE"
           }
 
@@ -62,13 +59,13 @@ jobs:
             REMAINING=$(( DURATION_SECS - ELAPSED ))
 
             if [ $REMAINING -le 0 ]; then
-              echo "✅ Total duration reached, stopping."
+              echo "Total duration reached, stopping."
               break
             fi
 
             SESSION=$((SESSION + 1))
-            CHUNK_DURATION=$(( REMAINING < 60 ? REMAINING : 60 ))
-            echo "▶ Session $SESSION starting — ${REMAINING}s remaining, recording ${CHUNK_DURATION}s chunk..."
+            CHUNK_DURATION=$(( REMAINING < 3600 ? REMAINING : 3600 ))
+            echo "Session $SESSION starting - ${REMAINING}s remaining, recording ${CHUNK_DURATION}s chunk..."
 
             ffmpeg -i "$STREAM_URL" \
               -c copy \
@@ -79,10 +76,10 @@ jobs:
               upload_file "chunks/session_${SESSION}.ts" &
             fi
 
-            echo "⚠ ffmpeg stopped, restarting in 1 second..."
+            echo "ffmpeg stopped, restarting in 1 second..."
             sleep 1
           done
 
-          echo "⏳ Waiting for remaining uploads to finish..."
+          echo "Waiting for remaining uploads to finish..."
           wait
-          echo "✅ All uploads done."
+          echo "All uploads done."
