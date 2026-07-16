@@ -1,0 +1,101 @@
+name: Record Stream
+
+on:
+  workflow_dispatch:
+    inputs:
+      stream_id:
+        description: 'Stream ID (1, 2, 3, 4, 5 or 6)'
+        required: false
+      duration:
+        description: 'Duration e.g. 02:30:00'
+        required: false
+      folder_id:
+        description: 'GoFile Folder ID (leave empty to use secret)'
+        required: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Install ffmpeg
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Set stream URL from secret
+        run: |
+          if [ "${{ github.event.inputs.stream_id }}" == "1" ]; then
+            echo "STREAM_URL=${{ secrets.STREAM_URL_1 }}" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.stream_id }}" == "2" ]; then
+            echo "STREAM_URL=${{ secrets.STREAM_URL_2 }}" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.stream_id }}" == "3" ]; then
+            echo "STREAM_URL=${{ secrets.STREAM_URL_3 }}" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.stream_id }}" == "4" ]; then
+            echo "STREAM_URL=${{ secrets.STREAM_URL_4 }}" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.stream_id }}" == "5" ]; then
+            echo "STREAM_URL=${{ secrets.STREAM_URL_5 }}" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.stream_id }}" == "6" ]; then
+            echo "STREAM_URL=${{ secrets.STREAM_URL_6 }}" >> $GITHUB_ENV
+          else
+            echo "STREAM_URL=${{ secrets.SCHEDULED_STREAM_URL }}" >> $GITHUB_ENV
+          fi
+
+      - name: Record and upload live
+        env:
+          GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
+          FOLDER_ID: ${{ github.event.inputs.folder_id || secrets.SCHEDULED_FOLDER_ID }}
+          DURATION: ${{ github.event.inputs.duration || secrets.SCHEDULED_DURATION }}
+        run: |
+          mkdir -p chunks
+
+          DURATION_SECS=$(echo "$DURATION" | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')
+          START_TIME=$(date +%s)
+          SESSION=0
+
+          upload_file() {
+            local FILE=$1
+            echo "Uploading $FILE..."
+            if [ -n "$FOLDER_ID" ]; then
+              RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
+                -F "token=${GOFILE_TOKEN}" \
+                -F "folderId=${FOLDER_ID}" \
+                -F "file=@${FILE}")
+            else
+              RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
+                -F "token=${GOFILE_TOKEN}" \
+                -F "file=@${FILE}")
+            fi
+            STATUS=$(echo $RESP | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','error'))")
+            echo "$FILE -> $STATUS"
+            rm "$FILE"
+          }
+
+          while true; do
+            ELAPSED=$(( $(date +%s) - START_TIME ))
+            REMAINING=$(( DURATION_SECS - ELAPSED ))
+
+            if [ $REMAINING -le 0 ]; then
+              echo "Total duration reached, stopping."
+              break
+            fi
+
+            SESSION=$((SESSION + 1))
+            CHUNK_DURATION=$(( REMAINING < 3600 ? REMAINING : 3600 ))
+            echo "Session $SESSION starting - ${REMAINING}s remaining, recording ${CHUNK_DURATION}s chunk..."
+
+            ffmpeg -i "$STREAM_URL" \
+              -c copy \
+              -t $CHUNK_DURATION \
+              "chunks/session_${SESSION}.ts" || true
+
+            if [ -f "chunks/session_${SESSION}.ts" ]; then
+              upload_file "chunks/session_${SESSION}.ts" &
+            fi
+
+            echo "ffmpeg stopped, restarting in 1 second..."
+            sleep 1
+          done
+
+          echo "Waiting for remaining uploads to finish..."
+          wait
+          echo "All uploads done."
