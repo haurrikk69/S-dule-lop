@@ -22,28 +22,34 @@ jobs:
       - name: Install ffmpeg
         run: sudo apt-get install -y ffmpeg
 
-      - name: Set stream URL from secret
+      - name: Set stream URL and folder from secret
         run: |
           if [ "${{ github.event.inputs.stream_id }}" == "1" ]; then
             echo "STREAM_URL=${{ secrets.STREAM_URL_1 }}" >> $GITHUB_ENV
+            echo "FOLDER_ID=${{ secrets.FOLDER_ID_1 }}" >> $GITHUB_ENV
           elif [ "${{ github.event.inputs.stream_id }}" == "2" ]; then
             echo "STREAM_URL=${{ secrets.STREAM_URL_2 }}" >> $GITHUB_ENV
+            echo "FOLDER_ID=${{ secrets.FOLDER_ID_2 }}" >> $GITHUB_ENV
           elif [ "${{ github.event.inputs.stream_id }}" == "3" ]; then
             echo "STREAM_URL=${{ secrets.STREAM_URL_3 }}" >> $GITHUB_ENV
+            echo "FOLDER_ID=${{ secrets.FOLDER_ID_3 }}" >> $GITHUB_ENV
           elif [ "${{ github.event.inputs.stream_id }}" == "4" ]; then
             echo "STREAM_URL=${{ secrets.STREAM_URL_4 }}" >> $GITHUB_ENV
+            echo "FOLDER_ID=${{ secrets.FOLDER_ID_4 }}" >> $GITHUB_ENV
           elif [ "${{ github.event.inputs.stream_id }}" == "5" ]; then
             echo "STREAM_URL=${{ secrets.STREAM_URL_5 }}" >> $GITHUB_ENV
+            echo "FOLDER_ID=${{ secrets.FOLDER_ID_5 }}" >> $GITHUB_ENV
           elif [ "${{ github.event.inputs.stream_id }}" == "6" ]; then
             echo "STREAM_URL=${{ secrets.STREAM_URL_6 }}" >> $GITHUB_ENV
+            echo "FOLDER_ID=${{ secrets.FOLDER_ID_6 }}" >> $GITHUB_ENV
           else
             echo "STREAM_URL=${{ secrets.SCHEDULED_STREAM_URL }}" >> $GITHUB_ENV
+            echo "FOLDER_ID=${{ secrets.SCHEDULED_FOLDER_ID }}" >> $GITHUB_ENV
           fi
 
       - name: Record and upload live
         env:
           GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
-          FOLDER_ID: ${{ github.event.inputs.folder_id || secrets.SCHEDULED_FOLDER_ID }}
           DURATION: ${{ github.event.inputs.duration || secrets.SCHEDULED_DURATION }}
         run: |
           mkdir -p chunks
