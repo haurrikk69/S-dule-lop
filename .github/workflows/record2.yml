@@ -62,19 +62,40 @@ jobs:
 
           upload_file() {
             local FILE=$1
-            echo "Uploading $FILE..."
-            if [ -n "$FOLDER_ID" ]; then
-              RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
-                -F "token=${GOFILE_TOKEN}" \
-                -F "folderId=${FOLDER_ID}" \
-                -F "file=@${FILE}")
-            else
-              RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
-                -F "token=${GOFILE_TOKEN}" \
-                -F "file=@${FILE}")
-            fi
-            STATUS=$(echo $RESP | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','error'))")
-            echo "$FILE -> $STATUS"
+            local MAX_RETRIES=10
+            local ATTEMPT=0
+
+            while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+              ATTEMPT=$((ATTEMPT + 1))
+              echo "Uploading $FILE (attempt $ATTEMPT/$MAX_RETRIES)..."
+
+              if [ -n "$FOLDER_ID" ]; then
+                RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
+                  -F "token=${GOFILE_TOKEN}" \
+                  -F "folderId=${FOLDER_ID}" \
+                  -F "file=@${FILE}")
+              else
+                RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
+                  -F "token=${GOFILE_TOKEN}" \
+                  -F "file=@${FILE}")
+              fi
+
+              STATUS=$(echo $RESP | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','error'))" 2>/dev/null || echo "error")
+
+              if [ "$STATUS" == "ok" ]; then
+                echo "$FILE -> uploaded successfully"
+                rm "$FILE"
+                return 0
+              else
+                echo "$FILE -> attempt $ATTEMPT failed: $STATUS"
+                if [ $ATTEMPT -lt $MAX_RETRIES ]; then
+                  echo "Retrying in 30 seconds..."
+                  sleep 30
+                fi
+              fi
+            done
+
+            echo "$FILE -> all 10 attempts failed, deleting file."
             rm "$FILE"
           }
 
