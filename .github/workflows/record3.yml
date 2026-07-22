@@ -1,0 +1,23 @@
+name: Sn Downloader
+
+on:
+  workflow_dispatch:
+
+jobs:
+  snap-dl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340   # Just under GitHub's 6-hour hard limit
+
+    steps:
+      # ── Setup ────────────────────────────────────────────────────────────────
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Disk space before downloads
+        run: df -h /home/runner
