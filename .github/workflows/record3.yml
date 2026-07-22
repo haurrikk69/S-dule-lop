@@ -1,23 +1,140 @@
-name: Sn Downloader
+name: Record Stream
 
 on:
   workflow_dispatch:
+    inputs:
+      stream_id:
+        description: 'Stream ID (1 to 20)'
+        required: false
+      duration:
+        description: 'Duration e.g. 02:30:00'
+        required: false
+      folder_id:
+        description: 'GoFile Folder ID (leave empty to use secret)'
+        required: false
 
 jobs:
-  snap-dl:
+  record:
     runs-on: ubuntu-latest
-    timeout-minutes: 340   # Just under GitHub's 6-hour hard limit
+    timeout-minutes: 350
 
     steps:
-      # ── Setup ────────────────────────────────────────────────────────────────
+      - name: Install ffmpeg
+        run: sudo apt-get install -y ffmpeg
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Set stream URL and folder from secret
+        run: |
+          case "${{ github.event.inputs.stream_id }}" in
+            "1")  echo "STREAM_URL=${{ secrets.STREAM_URL_1 }}"  >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_1 }}"  >> $GITHUB_ENV ;;
+            "2")  echo "STREAM_URL=${{ secrets.STREAM_URL_2 }}"  >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_2 }}"  >> $GITHUB_ENV ;;
+            "3")  echo "STREAM_URL=${{ secrets.STREAM_URL_3 }}"  >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_3 }}"  >> $GITHUB_ENV ;;
+            "4")  echo "STREAM_URL=${{ secrets.STREAM_URL_4 }}"  >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_4 }}"  >> $GITHUB_ENV ;;
+            "5")  echo "STREAM_URL=${{ secrets.STREAM_URL_5 }}"  >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_5 }}"  >> $GITHUB_ENV ;;
+            "6")  echo "STREAM_URL=${{ secrets.STREAM_URL_6 }}"  >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_6 }}"  >> $GITHUB_ENV ;;
+            "7")  echo "STREAM_URL=${{ secrets.STREAM_URL_7 }}"  >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_7 }}"  >> $GITHUB_ENV ;;
+            "8")  echo "STREAM_URL=${{ secrets.STREAM_URL_8 }}"  >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_8 }}"  >> $GITHUB_ENV ;;
+            "9")  echo "STREAM_URL=${{ secrets.STREAM_URL_9 }}"  >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_9 }}"  >> $GITHUB_ENV ;;
+            "10") echo "STREAM_URL=${{ secrets.STREAM_URL_10 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_10 }}" >> $GITHUB_ENV ;;
+            "11") echo "STREAM_URL=${{ secrets.STREAM_URL_11 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_11 }}" >> $GITHUB_ENV ;;
+            "12") echo "STREAM_URL=${{ secrets.STREAM_URL_12 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_12 }}" >> $GITHUB_ENV ;;
+            "13") echo "STREAM_URL=${{ secrets.STREAM_URL_13 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_13 }}" >> $GITHUB_ENV ;;
+            "14") echo "STREAM_URL=${{ secrets.STREAM_URL_14 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_14 }}" >> $GITHUB_ENV ;;
+            "15") echo "STREAM_URL=${{ secrets.STREAM_URL_15 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_15 }}" >> $GITHUB_ENV ;;
+            "16") echo "STREAM_URL=${{ secrets.STREAM_URL_16 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_16 }}" >> $GITHUB_ENV ;;
+            "17") echo "STREAM_URL=${{ secrets.STREAM_URL_17 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_17 }}" >> $GITHUB_ENV ;;
+            "18") echo "STREAM_URL=${{ secrets.STREAM_URL_18 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_18 }}" >> $GITHUB_ENV ;;
+            "19") echo "STREAM_URL=${{ secrets.STREAM_URL_19 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_19 }}" >> $GITHUB_ENV ;;
+            "20") echo "STREAM_URL=${{ secrets.STREAM_URL_20 }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.FOLDER_ID_20 }}" >> $GITHUB_ENV ;;
+            *)    echo "STREAM_URL=${{ secrets.SCHEDULED_STREAM_URL }}" >> $GITHUB_ENV; echo "FOLDER_ID=${{ secrets.SCHEDULED_FOLDER_ID }}" >> $GITHUB_ENV ;;
+          esac
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Record and upload live
+        env:
+          GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
+          DURATION: ${{ github.event.inputs.duration || secrets.SCHEDULED_DURATION }}
+        run: |
+          DURATION_SECS=$(echo "$DURATION" | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')
+          START_TIME=$(date +%s)
+          SESSION=0
+          MIN_SIZE_BYTES=19922944  # 19MB
+          RECORD_DIR="/home/runner"
 
-      - name: Disk space before downloads
-        run: df -h /home/runner
+          upload_file() {
+            local FILE=$1
+            local MAX_RETRIES=10
+            local ATTEMPT=0
+
+            while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+              ATTEMPT=$((ATTEMPT + 1))
+              echo "Uploading $FILE (attempt $ATTEMPT/$MAX_RETRIES)..."
+
+              if [ -n "$FOLDER_ID" ]; then
+                RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
+                  -F "token=${GOFILE_TOKEN}" \
+                  -F "folderId=${FOLDER_ID}" \
+                  -F "file=@${FILE}")
+              else
+                RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
+                  -F "token=${GOFILE_TOKEN}" \
+                  -F "file=@${FILE}")
+              fi
+
+              STATUS=$(echo $RESP | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','error'))" 2>/dev/null || echo "error")
+
+              if [ "$STATUS" == "ok" ]; then
+                echo "$FILE -> uploaded successfully"
+                rm "$FILE"
+                return 0
+              else
+                echo "$FILE -> attempt $ATTEMPT failed: $STATUS"
+                if [ $ATTEMPT -lt $MAX_RETRIES ]; then
+                  echo "Retrying in 30 seconds..."
+                  sleep 30
+                fi
+              fi
+            done
+
+            echo "$FILE -> all 10 attempts failed, deleting file."
+            rm "$FILE"
+          }
+
+          while true; do
+            ELAPSED=$(( $(date +%s) - START_TIME ))
+            REMAINING=$(( DURATION_SECS - ELAPSED ))
+
+            if [ $REMAINING -le 0 ]; then
+              echo "Total duration reached, stopping."
+              break
+            fi
+
+            SESSION=$((SESSION + 1))
+            CHUNK_DURATION=$(( REMAINING < 18000 ? REMAINING : 18000 ))
+            echo "Session $SESSION starting - ${REMAINING}s remaining, recording ${CHUNK_DURATION}s chunk..."
+
+            ffmpeg -i "$STREAM_URL" \
+              -map 0 \
+              -c copy \
+              -t $CHUNK_DURATION \
+              "$RECORD_DIR/session_${SESSION}.ts" || true
+
+            FILE="$RECORD_DIR/session_${SESSION}.ts"
+            if [ -f "$FILE" ]; then
+              FILE_SIZE=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
+              FILE_MB=$(( FILE_SIZE / 1024 / 1024 ))
+
+              if [ "$FILE_SIZE" -lt "$MIN_SIZE_BYTES" ]; then
+                echo "Skipping $FILE (${FILE_MB}MB) - too small, deleting..."
+                rm "$FILE"
+              else
+                echo "Good file (${FILE_MB}MB) - uploading..."
+                upload_file "$FILE" &
+              fi
+            fi
+
+            echo "ffmpeg stopped, restarting in 1 second..."
+            sleep 1
+          done
+
+          echo "Waiting for remaining uploads to finish..."
+          wait
+          echo "All uploads done."
