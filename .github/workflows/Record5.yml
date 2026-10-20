@@ -34,31 +34,11 @@ jobs:
           echo "forward-socks5 / 127.0.0.1:40000 ." | sudo tee -a /etc/privoxy/config
           sudo service privoxy start
 
-          echo "=== warp-cli --help ==="
-          warp-cli --help 2>&1 || true
-          echo "=== warp-cli mode --help ==="
-          warp-cli mode --help 2>&1 || true
-          echo "=== warp-cli tunnel --help ==="
-          warp-cli tunnel --help 2>&1 || true
-          echo "=== warp-cli proxy --help ==="
-          warp-cli proxy --help 2>&1 || true
-
-          echo "=== Registering ==="
           warp-cli --accept-tos registration new
-
-          echo "=== Setting proxy mode ==="
-          warp-cli mode set proxy 2>&1 || \
-          warp-cli tunnel mode set proxy 2>&1 || \
-          warp-cli proxy on 2>&1 || \
-          warp-cli proxy set 2>&1 || \
-          echo "WARNING: could not set proxy mode"
-
-          echo "=== Connecting ==="
+          warp-cli mode proxy
           warp-cli --accept-tos connect
           sleep 5
-
-          echo "=== Status ==="
-          warp-cli status 2>&1 || true
+          warp-cli --accept-tos status 2>&1 || true
 
       - name: Set stream URL and folder from secret
         run: |
