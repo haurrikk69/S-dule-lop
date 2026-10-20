@@ -26,6 +26,11 @@ jobs:
       - name: Install ffmpeg
         run: sudo apt-get install -y ffmpeg
 
+      - name: Set DNS to Cloudflare 1.1.1.1
+        run: |
+          echo "nameserver 1.1.1.1" | sudo tee /etc/resolv.conf
+          echo "nameserver 1.0.0.1" | sudo tee -a /etc/resolv.conf
+
       - name: Set stream URL and folder from secret
         run: |
           if [ -n "${{ github.event.inputs.url }}" ]; then
