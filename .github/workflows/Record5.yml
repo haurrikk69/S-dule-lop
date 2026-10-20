@@ -35,7 +35,7 @@ jobs:
           sudo service privoxy start
 
           warp-cli --accept-tos registration new
-          warp-cli mode proxy
+          warp-cli --accept-tos mode proxy
           warp-cli --accept-tos connect
           sleep 5
           warp-cli --accept-tos status 2>&1 || true
