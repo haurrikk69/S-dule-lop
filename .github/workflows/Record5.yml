@@ -31,15 +31,27 @@ jobs:
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
           sudo apt-get update && sudo apt-get install -y cloudflare-warp privoxy
-          # Forward privoxy HTTP proxy (port 8118) → WARP SOCKS5 (port 40000)
           echo "forward-socks5 / 127.0.0.1:40000 ." | sudo tee -a /etc/privoxy/config
           sudo service privoxy start
-          # Proxy mode: only traffic explicitly sent to port 40000 goes through Cloudflare
+
+          echo "=== warp-cli available commands ==="
+          warp-cli --help 2>&1 || true
+
+          echo "=== Registering ==="
           warp-cli --accept-tos registration new
-          warp-cli set-mode proxy
+
+          echo "=== Setting proxy mode ==="
+          warp-cli mode set proxy 2>&1 || \
+          warp-cli tunnel mode proxy 2>&1 || \
+          warp-cli proxy enable 2>&1 || \
+          echo "WARNING: could not set proxy mode, check commands above"
+
+          echo "=== Connecting ==="
           warp-cli connect
           sleep 5
-          warp-cli status
+
+          echo "=== Status ==="
+          warp-cli status 2>&1 || true
 
       - name: Set stream URL and folder from secret
         run: |
