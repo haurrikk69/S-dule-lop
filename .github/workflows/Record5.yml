@@ -1,4 +1,4 @@
-name: Record Stream
+name: CF 5 rec
 run-name: ${{ github.event.inputs.name || 'Record Stream' }}
 on:
   workflow_dispatch:
@@ -26,10 +26,21 @@ jobs:
       - name: Install ffmpeg
         run: sudo apt-get install -y ffmpeg
 
-      - name: Set DNS to Cloudflare 1.1.1.1
+      - name: Setup Cloudflare WARP (proxy mode only)
         run: |
-          echo "nameserver 1.1.1.1" | sudo tee /etc/resolv.conf
-          echo "nameserver 1.0.0.1" | sudo tee -a /etc/resolv.conf
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update && sudo apt-get install -y cloudflare-warp privoxy
+          # Forward privoxy HTTP proxy (port 8118) → WARP SOCKS5 (port 40000)
+          echo "forward-socks5 / 127.0.0.1:40000 ." | sudo tee -a /etc/privoxy/config
+          sudo service privoxy start
+          # Proxy mode: only traffic explicitly sent to port 40000 goes through Cloudflare
+          # This does NOT route GitHub Actions runner traffic, so the action stays alive
+          warp-cli --accept-tos register
+          warp-cli set-mode proxy
+          warp-cli connect
+          sleep 5
+          warp-cli status
 
       - name: Set stream URL and folder from secret
         run: |
@@ -123,6 +134,7 @@ jobs:
             CHUNK_DURATION=$(( REMAINING < 14400 ? REMAINING : 14400 ))
             echo "Session $SESSION starting - ${REMAINING}s remaining, recording ${CHUNK_DURATION}s chunk..."
             ffmpeg \
+              -http_proxy "http://127.0.0.1:8118" \
               -user_agent "VLC/3.0.20 LibVLC/3.0.20" \
               -i "$STREAM_URL" \
               -map 0 \
