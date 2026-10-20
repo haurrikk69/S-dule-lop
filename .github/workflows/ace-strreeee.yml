@@ -1,0 +1,128 @@
+name: Record AceStream
+run-name: ${{ github.event.inputs.name || 'Record AceStream' }}
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Run name (e.g. BeIN Sports - El Clasico)'
+        required: false
+      acestream_id:
+        description: 'AceStream hash ID'
+        required: true
+      duration:
+        description: 'Duration e.g. 02:30:00'
+        required: false
+      folder_id:
+        description: 'GoFile Folder ID (leave empty to use secret)'
+        required: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Install ffmpeg
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Start AceStream Engine
+        run: |
+          docker pull magnetikonline/acestream-server
+          docker run -d --name acestream -p 6878:6878 magnetikonline/acestream-server
+
+          echo "Waiting for AceStream engine to be ready..."
+          for i in $(seq 1 30); do
+            if curl -sf "http://127.0.0.1:6878/webui/api/service?method=get_version" > /dev/null 2>&1; then
+              echo "AceStream engine is up!"
+              break
+            fi
+            echo "  attempt $i/30, waiting 3s..."
+            sleep 3
+          done
+
+          echo "Pre-connecting to stream to let P2P peers gather (30s)..."
+          curl -s "http://127.0.0.1:6878/ace/getstream?id=${{ github.event.inputs.acestream_id }}" \
+            --max-time 30 -o /dev/null || true
+          sleep 5
+
+      - name: Record and upload
+        env:
+          GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
+          DURATION: ${{ github.event.inputs.duration || secrets.SCHEDULED_DURATION }}
+          ACESTREAM_ID: ${{ github.event.inputs.acestream_id }}
+          FOLDER_ID: ${{ github.event.inputs.folder_id || secrets.SCHEDULED_FOLDER_ID }}
+        run: |
+          mkdir -p chunks
+          STREAM_URL="http://127.0.0.1:6878/ace/getstream?id=${ACESTREAM_ID}"
+          DURATION_SECS=$(echo "$DURATION" | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')
+          START_TIME=$(date +%s)
+          SESSION=0
+          MIN_SIZE_BYTES=19922944  # 19MB
+
+          upload_file() {
+            local FILE=$1
+            local MAX_RETRIES=10
+            local ATTEMPT=0
+            while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+              ATTEMPT=$((ATTEMPT + 1))
+              echo "Uploading $FILE (attempt $ATTEMPT/$MAX_RETRIES)..."
+              if [ -n "$FOLDER_ID" ]; then
+                RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
+                  -F "token=${GOFILE_TOKEN}" \
+                  -F "folderId=${FOLDER_ID}" \
+                  -F "file=@${FILE}")
+              else
+                RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
+                  -F "token=${GOFILE_TOKEN}" \
+                  -F "file=@${FILE}")
+              fi
+              STATUS=$(echo $RESP | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','error'))" 2>/dev/null || echo "error")
+              if [ "$STATUS" == "ok" ]; then
+                echo "$FILE -> uploaded successfully"
+                rm "$FILE"
+                return 0
+              else
+                echo "$FILE -> attempt $ATTEMPT failed: $STATUS"
+                if [ $ATTEMPT -lt $MAX_RETRIES ]; then
+                  echo "Retrying in 30 seconds..."
+                  sleep 30
+                fi
+              fi
+            done
+            echo "$FILE -> all 10 attempts failed, deleting file."
+            rm "$FILE"
+          }
+
+          while true; do
+            ELAPSED=$(( $(date +%s) - START_TIME ))
+            REMAINING=$(( DURATION_SECS - ELAPSED ))
+            if [ $REMAINING -le 0 ]; then
+              echo "Total duration reached, stopping."
+              break
+            fi
+            SESSION=$((SESSION + 1))
+            CHUNK_DURATION=$(( REMAINING < 14400 ? REMAINING : 14400 ))
+            echo "Session $SESSION starting - ${REMAINING}s remaining, recording ${CHUNK_DURATION}s chunk..."
+            ffmpeg \
+              -i "$STREAM_URL" \
+              -map 0 \
+              -c copy \
+              -t $CHUNK_DURATION \
+              "chunks/session_${SESSION}.ts" || true
+            FILE="chunks/session_${SESSION}.ts"
+            if [ -f "$FILE" ]; then
+              FILE_SIZE=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
+              FILE_MB=$(( FILE_SIZE / 1024 / 1024 ))
+              if [ "$FILE_SIZE" -lt "$MIN_SIZE_BYTES" ]; then
+                echo "Skipping $FILE (${FILE_MB}MB) - too small, deleting..."
+                rm "$FILE"
+              else
+                echo "Good file (${FILE_MB}MB) - uploading..."
+                upload_file "$FILE" &
+              fi
+            fi
+            echo "ffmpeg stopped, restarting in 1 second..."
+            sleep 1
+          done
+          echo "Waiting for remaining uploads to finish..."
+          wait
+          echo "All uploads done."
