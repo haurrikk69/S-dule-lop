@@ -1,4 +1,4 @@
-name: Record AceStream
+name: ace-streee
 run-name: ${{ github.event.inputs.name || 'Record AceStream' }}
 on:
   workflow_dispatch:
