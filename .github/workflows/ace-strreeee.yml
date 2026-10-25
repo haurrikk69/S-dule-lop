@@ -1,4 +1,4 @@
-name: ace-streee
+name: ace-stree
 run-name: ${{ github.event.inputs.name || 'Record AceStream' }}
 on:
   workflow_dispatch:
@@ -11,6 +11,7 @@ on:
         required: true
       duration:
         description: 'Duration e.g. 02:30:00'
+        default: '02:15:00'
         required: false
       folder_id:
         description: 'GoFile Folder ID (leave empty to use secret)'
@@ -60,11 +61,10 @@ jobs:
 
           upload_file() {
             local FILE=$1
-            local MAX_RETRIES=10
             local ATTEMPT=0
-            while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+            while true; do
               ATTEMPT=$((ATTEMPT + 1))
-              echo "Uploading $FILE (attempt $ATTEMPT/$MAX_RETRIES)..."
+              echo "Uploading $FILE (attempt $ATTEMPT)..."
               if [ -n "$FOLDER_ID" ]; then
                 RESP=$(curl -s -X POST "https://upload.gofile.io/uploadFile" \
                   -F "token=${GOFILE_TOKEN}" \
@@ -77,19 +77,14 @@ jobs:
               fi
               STATUS=$(echo $RESP | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','error'))" 2>/dev/null || echo "error")
               if [ "$STATUS" == "ok" ]; then
-                echo "$FILE -> uploaded successfully"
+                echo "$FILE -> uploaded successfully on attempt $ATTEMPT"
                 rm "$FILE"
                 return 0
               else
-                echo "$FILE -> attempt $ATTEMPT failed: $STATUS"
-                if [ $ATTEMPT -lt $MAX_RETRIES ]; then
-                  echo "Retrying in 30 seconds..."
-                  sleep 30
-                fi
+                echo "$FILE -> attempt $ATTEMPT failed: $STATUS — retrying in 30 seconds..."
+                sleep 30
               fi
             done
-            echo "$FILE -> all 10 attempts failed, deleting file."
-            rm "$FILE"
           }
 
           while true; do
